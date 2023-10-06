@@ -1,0 +1,6 @@
+*~
+main
+*.o
+*.depth
+*.kmc_pre
+*.kmc_suf
