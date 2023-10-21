@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <string>
 #include <zlib.h>
 
@@ -104,9 +105,34 @@ int main(int argc, char *argv[]) {
 
   std::vector<uint> control_bin(wsize);
   std::vector<uint> case_bin(wsize);
+  std::vector<float> ratio_bin(wsize);
 
+  int tot_l = 0;
+  while ((l = kseq_read(seq)) >= 0)
+    tot_l += l - klen;
+
+  float case_norm =
+      (float)std::accumulate(
+          KMERS_CASE.begin(), KMERS_CASE.end(), 0,
+          [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
+            return prev_sum + entry.second;
+          }) /
+      tot_l;
+  float control_norm =
+      (float)std::accumulate(
+          KMERS_CONTROL.begin(), KMERS_CONTROL.end(), 0,
+          [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
+            return prev_sum + entry.second;
+          }) /
+      tot_l;
+  std::cerr << case_norm << " " << control_norm << std::endl;
+  // reinit fasta reader
+  gzclose(fa);
+  fa = gzopen(fa_path, "r");
+  seq = kseq_init(fa);
   while ((l = kseq_read(seq)) >= 0) {
-    std::cerr << "\t`> " << seq->name.s << std::endl;
+    // std::cerr << "\t`> " << seq->name.s << std::endl;
+
     strncpy(kmer, seq->seq.s, klen);
     kmer_d = kmer2d(kmer, klen);
     rckmer_d = revcompl(kmer_d, klen);
@@ -118,8 +144,8 @@ int main(int argc, char *argv[]) {
     case_bin[bin_p] = KMERS_CASE.find(ckmer_d) != KMERS_CASE.end()
                           ? KMERS_CASE.at(ckmer_d)
                           : 0;
-    std::cerr << seq->name.s << "\t" << p + 1 << "\t" << control_bin[bin_p]
-              << "\t" << case_bin[bin_p] << std::endl;
+    // std::cerr << seq->name.s << "\t" << p + 1 << "\t" << control_bin[bin_p]
+    //           << "\t" << case_bin[bin_p] << std::endl;
     ++bin_p;
 
     for (p = klen; p < l; ++p) {
@@ -134,19 +160,33 @@ int main(int argc, char *argv[]) {
       case_bin[bin_p] = KMERS_CASE.find(ckmer_d) != KMERS_CASE.end()
                             ? KMERS_CASE.at(ckmer_d)
                             : 0;
-      std::cerr << seq->name.s << "\t" << p - klen + 2 << "\t"
-                << control_bin[bin_p] << "\t" << case_bin[bin_p] << std::endl;
+      ratio_bin[bin_p] =
+          (float)(case_bin[bin_p] == 0 ? 0.0001 : case_bin[bin_p] / case_norm) /
+          (float)(control_bin[bin_p] == 0 ? 0.0001
+                                          : control_bin[bin_p] / control_norm);
+      // std::cerr << seq->name.s << "\t" << p - klen + 2 << "\t"
+      //           << case_bin[bin_p] << "\t" << control_bin[bin_p] << "\t"
+      //           << ratio_bin[bin_p] << std::endl;
       ++bin_p;
       if (bin_p >= wsize) {
         std::cout << seq->name.s << ":" << p - klen + 2 - wsize << "-"
                   << p - klen + 1 << "\t";
-        std::cout << control_bin[0];
-        for (int _ = 1; _ < wsize; ++_)
-          std::cout << "," << control_bin[_];
-        std::cout << "\t";
         std::cout << case_bin[0];
         for (int _ = 1; _ < wsize; ++_)
-          std::cout << "," << case_bin[_];
+          std::cout << "," << case_bin[_] / case_norm;
+        std::cout << "\t";
+        std::cout << control_bin[0];
+        for (int _ = 1; _ < wsize; ++_)
+          std::cout << "," << control_bin[_] / control_norm;
+        std::cout << "\t";
+
+        std::cout << ratio_bin[0];
+        for (int _ = 1; _ < wsize; ++_)
+          std::cout << "," << ratio_bin[_];
+        std::cout << "\t";
+        size_t n = wsize / 2; // CHECKME: what about odd wsize?
+        nth_element(ratio_bin.begin(), ratio_bin.begin() + n, ratio_bin.end());
+        std::cout << ratio_bin[n];
         bin_p = 0;
         std::cout << std::endl;
       }
