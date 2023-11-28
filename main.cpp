@@ -72,14 +72,15 @@ std::map<uint64_t, uint8_t> extract_kmers_from_db(char *kmc_path,
     kmer_obj.to_string(kmer);
     KMERS[kmer2d(kmer, *klen)] = counter;
   }
+
   return KMERS;
 }
 
 int main(int argc, char *argv[]) {
-  char *fa_path = argv[1];
-  char *kcontrol_path = argv[2];
-  char *kcase_path = argv[3];
-  uint wsize = std::stoi(argv[4]);
+  char *fa_path = argv[1];         // reference
+  char *kcontrol_path = argv[2];   // control KMC database
+  char *kcase_path = argv[3];      // case KMC database
+  uint wsize = std::stoi(argv[4]); // window size
 
   uint32_t klen;
   std::map<uint64_t, uint8_t> KMERS_CONTROL =
@@ -107,25 +108,42 @@ int main(int argc, char *argv[]) {
   std::vector<uint> case_bin(wsize);
   std::vector<float> ratio_bin(wsize);
 
-  int tot_l = 0;
-  while ((l = kseq_read(seq)) >= 0)
-    tot_l += l - klen;
-
-  float case_norm =
-      (float)std::accumulate(
-          KMERS_CASE.begin(), KMERS_CASE.end(), 0,
-          [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
-            return prev_sum + entry.second;
-          }) /
-      tot_l;
-  float control_norm =
-      (float)std::accumulate(
-          KMERS_CONTROL.begin(), KMERS_CONTROL.end(), 0,
-          [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
-            return prev_sum + entry.second;
-          }) /
-      tot_l;
+  float case_norm;
+  float control_norm;
+  if (false) { // FIXME: add to CLI
+    int tot_l = 0;
+    while ((l = kseq_read(seq)) >= 0)
+      tot_l += l - klen;
+    case_norm =
+        (float)std::accumulate(
+            KMERS_CASE.begin(), KMERS_CASE.end(), 0,
+            [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
+              return prev_sum + entry.second;
+            }) /
+        tot_l;
+    control_norm =
+        (float)std::accumulate(
+            KMERS_CONTROL.begin(), KMERS_CONTROL.end(), 0,
+            [](const int prev_sum, const std::pair<uint64_t, uint8_t> &entry) {
+              return prev_sum + entry.second;
+            }) /
+        tot_l;
+  } else {
+    std::vector<uint8_t> counts;
+    for (const auto &elem : KMERS_CONTROL)
+      counts.push_back(elem.second);
+    nth_element(counts.begin(), counts.begin() + counts.size() / 2,
+                counts.end());
+    control_norm = counts[counts.size() / 2]; // CHECKME: what about even wsize?
+    counts.clear();
+    for (const auto &elem : KMERS_CASE)
+      counts.push_back(elem.second);
+    nth_element(counts.begin(), counts.begin() + counts.size() / 2,
+                counts.end());
+    case_norm = counts[counts.size() / 2]; // CHECKME: what about even wsize?
+  }
   std::cerr << case_norm << " " << control_norm << std::endl;
+
   // reinit fasta reader
   gzclose(fa);
   fa = gzopen(fa_path, "r");
@@ -184,14 +202,14 @@ int main(int argc, char *argv[]) {
         for (int _ = 1; _ < wsize; ++_)
           std::cout << "," << ratio_bin[_];
         std::cout << "\t";
-        size_t n = wsize / 2; // CHECKME: what about odd wsize?
+        size_t n = wsize / 2; // CHECKME: what about even wsize?
         nth_element(ratio_bin.begin(), ratio_bin.begin() + n, ratio_bin.end());
         std::cout << ratio_bin[n];
         bin_p = 0;
         std::cout << std::endl;
       }
     }
-    // TODO: manage last k-1 bases
+    // TODO: manage last short (<wsize) bin
     // while (p - klen < l - 1) {
     //   std::cout << seq->name.s << "\t" << p - klen + 2 << "\t" << 0
     //             << std::endl;
