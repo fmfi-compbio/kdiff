@@ -7,9 +7,9 @@ LIBS=-lz
 
 .PHONY: all
 
-all: main
+all: MFCNV
 
-main: main.o ./KMC/kmc_api/kmc_file.o ./KMC/kmc_api/kmer_api.o ./KMC/kmc_api/mmer.o
+MFCNV: main.o ./KMC/kmc_api/kmc_file.o ./KMC/kmc_api/kmer_api.o ./KMC/kmc_api/mmer.o
 	@echo "* Linking $@"
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIBS)
 
