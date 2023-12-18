@@ -296,19 +296,19 @@ int main(int argc, char *argv[]) {
       if (bin_p >= wsize) {
         std::cout << seq->name.s << ":" << p - klen + 2 - wsize << "-"
                   << p - klen + 1 << "\t";
-        std::cout << case_bin[0];
-        for (int _ = 1; _ < wsize; ++_)
-          std::cout << "," << case_bin[_] / case_norm;
-        std::cout << "\t";
-        std::cout << control_bin[0];
-        for (int _ = 1; _ < wsize; ++_)
-          std::cout << "," << control_bin[_] / control_norm;
-        std::cout << "\t";
+        // std::cout << case_bin[0];
+        // for (int _ = 1; _ < wsize; ++_)
+        //   std::cout << "," << case_bin[_] / case_norm;
+        // std::cout << "\t";
+        // std::cout << control_bin[0];
+        // for (int _ = 1; _ < wsize; ++_)
+        //   std::cout << "," << control_bin[_] / control_norm;
+        // std::cout << "\t";
 
-        std::cout << ratio_bin[0];
-        for (int _ = 1; _ < wsize; ++_)
-          std::cout << "," << ratio_bin[_];
-        std::cout << "\t";
+        // std::cout << ratio_bin[0];
+        // for (int _ = 1; _ < wsize; ++_)
+        //   std::cout << "," << ratio_bin[_];
+        // std::cout << "\t";
         size_t n = wsize / 2; // CHECKME: what about even wsize?
         nth_element(ratio_bin.begin(), ratio_bin.begin() + n, ratio_bin.end());
         std::cout << ratio_bin[n];
