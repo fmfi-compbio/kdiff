@@ -4,8 +4,12 @@
 #include <string>
 #include <zlib.h>
 
-#include <kmc_api/kmc_file.h>
-#include <kseq.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
+
+#include "bloom_filter.hpp"
+#include "kmc_api/kmc_file.h"
+#include "kseq.h"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -14,6 +18,7 @@ static const char *const USAGE_MESSAGE =
     "      -m <INT>   minimum weight for kmers (default: 0)\n"
     "      -M <INT>   maximum weight for kmers (default: 65535)\n"
     "      -w <INT>   bin size (default: 1000)\n"
+    "      -b <INT>   Bloom filter size in GB (default: 1)\n"
     "      -a         use average instead of median for normalization\n"
     // "      -@ <INT>   set threads (default: 1)\n"
     // "      -v         verbose mode\n"
@@ -74,8 +79,8 @@ std::map<uint64_t, uint16_t> extract_kmers_from_db(char *kmc_path,
     std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
     exit(1);
   }
-  uint32 mode, min_counter, pref_len, sign_len, min_c, counter;
-  uint64 tot_kmers, max_c;
+  uint32_t mode, min_counter, pref_len, sign_len, min_c, counter;
+  uint64_t tot_kmers, max_c;
   kmer_db.Info(*klen, mode, min_counter, pref_len, sign_len, min_c, max_c,
                tot_kmers);
   CKmerAPI kmer_obj(*klen);
@@ -90,14 +95,86 @@ std::map<uint64_t, uint16_t> extract_kmers_from_db(char *kmc_path,
   return KMERS;
 }
 
+float average(std::map<uint16_t, uint32_t> hist) {
+  // TODO
+  (void)(hist); // suppress unused parameter warning
+  return 0.0;
+}
+
+float median(std::map<uint16_t, uint32_t> hist) {
+  // CHECKME
+  float med = 0.0;
+  uint64_t total = 0;
+  for (const auto &x : hist)
+    total += x.first * x.second;
+  uint64_t sum = 0;
+  for (const auto &x : hist) {
+    sum += x.first * x.second;
+    if (sum > total / 2) {
+      med = x.first;
+      break;
+    }
+  }
+  return med;
+}
+
+float pass1(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
+            uint16_t max_w, bool do_avg) {
+  std::map<uint16_t, uint32_t> khist;
+  CKMCFile kmer_db;
+  if (!kmer_db.OpenForListing(kmc_path)) {
+    std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
+    return -1;
+  }
+
+  uint32 mode, min_counter, pref_len, sign_len, min_c, counter;
+  uint64 tot_kmers, max_c;
+  kmer_db.Info(*klen, mode, min_counter, pref_len, sign_len, min_c, max_c,
+               tot_kmers);
+  CKmerAPI kmer_obj(*klen);
+  char kmer[*klen + 1];
+  while (kmer_db.ReadNextKmer(kmer_obj, counter)) {
+    if (counter >= min_w && counter <= max_w) {
+      kmer_obj.to_string(kmer);
+      bf->add_key(kmer2d(kmer, *klen));
+      ++khist[counter];
+    }
+  }
+  return do_avg ? average(khist) : median(khist);
+}
+
+void pass2(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
+           uint16_t max_w) {
+  CKMCFile kmer_db;
+  if (!kmer_db.OpenForListing(kmc_path)) {
+    std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
+    exit(1);
+  }
+
+  uint32 mode, min_counter, pref_len, sign_len, min_c, counter;
+  uint64 tot_kmers, max_c;
+  kmer_db.Info(*klen, mode, min_counter, pref_len, sign_len, min_c, max_c,
+               tot_kmers);
+  CKmerAPI kmer_obj(*klen);
+  char kmer[*klen + 1];
+  while (kmer_db.ReadNextKmer(kmer_obj, counter)) {
+    if (counter >= min_w && counter <= max_w) {
+      kmer_obj.to_string(kmer);
+      bf->set_count(kmer2d(kmer, *klen), counter);
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
+  spdlog::set_default_logger(spdlog::stderr_color_st("stderr"));
 
   uint16_t wsize = 1000; // window size
   uint16_t min_w = 0;
   uint16_t max_w = -1;
-  bool do_average = false;
+  uint64_t bf_size = ((uint64_t)0b1 << 33); // 1GB
+  bool do_avg = false;
   int a;
-  while ((a = getopt(argc, argv, "w:m:M:a:h")) >= 0) {
+  while ((a = getopt(argc, argv, "w:m:M:b:avh")) >= 0) {
     switch (a) {
     case 'w':
       wsize = atoi(optarg);
@@ -109,14 +186,18 @@ int main(int argc, char *argv[]) {
       max_w = atoi(optarg);
       continue;
     case 'a':
-      do_average = true;
+      do_avg = true;
       continue;
+    case 'b':
+      // Let's consider this as GB
+      bf_size = atoi(optarg) * ((uint64_t)0b1 << 33);
+      break;
     // case '@':
     //   threads = atoi(optarg);
     //   continue;
-    // case 'v':
-    //   spdlog::set_level(spdlog::level::debug);
-    //   continue;
+    case 'v':
+      spdlog::set_level(spdlog::level::debug);
+      continue;
     case 'h':
       std::cerr << USAGE_MESSAGE;
       return 0;
@@ -135,17 +216,30 @@ int main(int argc, char *argv[]) {
   char *kcontrol_path = argv[optind++]; // control KMC database
   char *kcase_path = argv[optind];      // case KMC database
 
-  uint32_t klen; // TODO: fail if k is different between databases
-  std::map<uint64_t, uint16_t> KMERS_CONTROL =
-      extract_kmers_from_db(kcontrol_path, &klen, min_w, max_w);
-  std::cerr << "Extracted " << KMERS_CONTROL.size() << " kmers from control db"
-            << std::endl;
-  std::map<uint64_t, uint16_t> KMERS_CASE =
-      extract_kmers_from_db(kcase_path, &klen, min_w, max_w);
-  std::cerr << "Extracted " << KMERS_CASE.size() << " kmers from case db"
-            << std::endl;
-  gzFile fa = gzopen(fa_path, "r");
-  kseq_t *seq = kseq_init(fa);
+  spdlog::info("Allocating Bloom filters");
+  BF control_bf(bf_size);
+  BF case_bf(bf_size);
+
+  // TODO: fail if k is different between databases
+  uint32_t klen;
+
+  spdlog::info("First pass on {}", kcontrol_path);
+  float control_norm =
+      pass1(kcontrol_path, &control_bf, &klen, min_w, max_w, do_avg);
+  spdlog::info("First pass on {}", kcase_path);
+  float case_norm = pass1(kcase_path, &case_bf, &klen, min_w, max_w, do_avg);
+
+  spdlog::info("Switching mode on control BF");
+  control_bf.switch_mode();
+  spdlog::info("Switching mode on case BF");
+  case_bf.switch_mode();
+
+  spdlog::info("Second pass on {}", kcontrol_path);
+  pass2(kcontrol_path, &control_bf, &klen, min_w, max_w);
+
+  spdlog::info("Second pass on {}", kcase_path);
+  pass2(kcase_path, &case_bf, &klen, min_w, max_w);
+
   char kmer[klen + 1];   // first kmer on sequence (plain)
   int l;                 // chromosome size
   uint64_t kmer_d = 0;   // kmer
@@ -155,70 +249,29 @@ int main(int argc, char *argv[]) {
   int p = 0;             // current position on chromosome
   int bin_p = 0;         // current position in bin
 
-  std::cerr << "Reading reference.." << std::endl;
-
   std::vector<uint16_t> control_bin(wsize);
   std::vector<uint16_t> case_bin(wsize);
   std::vector<float> ratio_bin(wsize);
 
-  float case_norm;
-  float control_norm;
-  if (do_average) {
-    // average mode
-    int tot_l = 0;
-    while ((l = kseq_read(seq)) >= 0)
-      tot_l += l - klen;
-    case_norm =
-        (float)std::accumulate(
-            KMERS_CASE.begin(), KMERS_CASE.end(), 0,
-            [](const int prev_sum, const std::pair<uint64_t, uint16_t> &entry) {
-              return prev_sum + entry.second;
-            }) /
-        tot_l;
-    control_norm =
-        (float)std::accumulate(
-            KMERS_CONTROL.begin(), KMERS_CONTROL.end(), 0,
-            [](const int prev_sum, const std::pair<uint64_t, uint16_t> &entry) {
-              return prev_sum + entry.second;
-            }) /
-        tot_l;
-  } else {
-    // median mode
-    std::vector<uint16_t> counts;
-    for (const auto &elem : KMERS_CONTROL)
-      counts.push_back(elem.second);
-    nth_element(counts.begin(), counts.begin() + counts.size() / 2,
-                counts.end());
-    control_norm = counts[counts.size() / 2]; // CHECKME: what about even wsize?
-    counts.clear();
-    for (const auto &elem : KMERS_CASE)
-      counts.push_back(elem.second);
-    nth_element(counts.begin(), counts.begin() + counts.size() / 2,
-                counts.end());
-    case_norm = counts[counts.size() / 2]; // CHECKME: what about even wsize?
-  }
-  std::cerr << case_norm << " " << control_norm << std::endl;
-
-  // reinit fasta reader
-  gzclose(fa);
-  fa = gzopen(fa_path, "r");
-  seq = kseq_init(fa);
+  gzFile fa = gzopen(fa_path, "r");
+  kseq_t *seq = kseq_init(fa);
   while ((l = kseq_read(seq)) >= 0) {
-    // std::cerr << "\t`> " << seq->name.s << std::endl;
+    spdlog::info("Iterating over {}", seq->name.s);
 
     strncpy(kmer, seq->seq.s, klen);
     kmer_d = kmer2d(kmer, klen);
     rckmer_d = revcompl(kmer_d, klen);
     ckmer_d = std::min(kmer_d, rckmer_d);
 
-    control_bin[bin_p] = KMERS_CONTROL.find(ckmer_d) != KMERS_CONTROL.end()
-                             ? KMERS_CONTROL.at(ckmer_d)
-                             : 0;
-    case_bin[bin_p] = KMERS_CASE.find(ckmer_d) != KMERS_CASE.end()
-                          ? KMERS_CASE.at(ckmer_d)
-                          : 0;
+    control_bin[bin_p] = control_bf.get_count(ckmer_d);
+    case_bin[bin_p] = case_bf.get_count(ckmer_d);
+    ratio_bin[bin_p] =
+        (float)(case_bin[bin_p] == 0 ? 0.0001 : case_bin[bin_p] / case_norm) /
+        (float)(control_bin[bin_p] == 0 ? 0.0001
+                                        : control_bin[bin_p] / control_norm);
+
     // std::cerr << seq->name.s << "\t" << p + 1 << "\t" << control_bin[bin_p]
-    //           << "\t" << case_bin[bin_p] << std::endl;
+    // << "\t" << case_bin[bin_p] << "\t" << ratio_bin[bin_p] << std::endl;
     ++bin_p;
 
     for (p = klen; p < l; ++p) {
@@ -227,19 +280,16 @@ int main(int argc, char *argv[]) {
       rckmer_d = rsprepend(rckmer_d, reverse_char(c), klen);
       ckmer_d = std::min(kmer_d, rckmer_d);
 
-      control_bin[bin_p] = KMERS_CONTROL.find(ckmer_d) != KMERS_CONTROL.end()
-                               ? KMERS_CONTROL.at(ckmer_d)
-                               : 0;
-      case_bin[bin_p] = KMERS_CASE.find(ckmer_d) != KMERS_CASE.end()
-                            ? KMERS_CASE.at(ckmer_d)
-                            : 0;
+      control_bin[bin_p] = control_bf.get_count(ckmer_d);
+      case_bin[bin_p] = case_bf.get_count(ckmer_d);
       ratio_bin[bin_p] =
           (float)(case_bin[bin_p] == 0 ? 0.0001 : case_bin[bin_p] / case_norm) /
           (float)(control_bin[bin_p] == 0 ? 0.0001
                                           : control_bin[bin_p] / control_norm);
-      // std::cerr << seq->name.s << "\t" << p - klen + 2 << "\t"
-      //           << case_bin[bin_p] << "\t" << control_bin[bin_p] << "\t"
-      //           << ratio_bin[bin_p] << std::endl;
+
+      // std::cerr << seq->name.s << "\t" << p - klen + 2 << "\t" <<
+      // case_bin[bin_p] << "\t" << control_bin[bin_p] << "\t" <<
+      // ratio_bin[bin_p] << std::endl;
       ++bin_p;
       if (bin_p >= wsize) {
         std::cout << seq->name.s << ":" << p - klen + 2 - wsize << "-"
@@ -274,5 +324,6 @@ int main(int argc, char *argv[]) {
 
   kseq_destroy(seq);
   gzclose(fa);
+
   return 0;
 }

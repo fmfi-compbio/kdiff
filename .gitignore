@@ -1,3 +1,6 @@
+example/
+build/
+.vscode/
 *~
 MFCNV
 *.o
