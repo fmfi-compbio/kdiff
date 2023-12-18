@@ -59,6 +59,8 @@ public:
     return 0;
   }
 
+  float get_ratio() const { return _counts.size() / (float)_size; }
+
 private:
   bool _mode; // false = write, true = read
   size_t _size;

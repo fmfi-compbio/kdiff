@@ -231,8 +231,10 @@ int main(int argc, char *argv[]) {
 
   spdlog::info("Switching mode on control BF");
   control_bf.switch_mode();
+  spdlog::info("Fill ratio for control BF:\t{}", control_bf.get_ratio());
   spdlog::info("Switching mode on case BF");
   case_bf.switch_mode();
+  spdlog::info("Fill ratio for case BF:\t{}", case_bf.get_ratio());
 
   spdlog::info("Second pass on {}", kcontrol_path);
   pass2(kcontrol_path, &control_bf, &klen, min_w, max_w);
