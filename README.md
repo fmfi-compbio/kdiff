@@ -13,7 +13,7 @@ cd ..
 cd example
 
 # 1 count kmers from reference
-kmc -m16 -t4 -k21 -ci1 -cs65535 -fa reference.fa reference-k21 .
+kmc -m16 -t4 -k21 -ci1 -cs65535 -fm reference.fa reference-k21 .
 
 # 2 count kmers from case and control (paired-end fastq)
 ls control_1.fq control_2.fq > control.list
