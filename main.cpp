@@ -223,10 +223,10 @@ int main(int argc, char *argv[]) {
   // TODO: fail if k is different between databases
   uint32_t klen;
 
-  spdlog::info("First pass on {}", kcontrol_path);
+  spdlog::info("First pass on control db: {}", kcontrol_path);
   float control_norm =
       pass1(kcontrol_path, &control_bf, &klen, min_w, max_w, do_avg);
-  spdlog::info("First pass on {}", kcase_path);
+  spdlog::info("First pass on case db: {}", kcase_path);
   float case_norm = pass1(kcase_path, &case_bf, &klen, min_w, max_w, do_avg);
 
   spdlog::info("Switching mode on control BF");
@@ -236,10 +236,10 @@ int main(int argc, char *argv[]) {
   case_bf.switch_mode();
   spdlog::info("Fill ratio for case BF:\t{}", case_bf.get_ratio());
 
-  spdlog::info("Second pass on {}", kcontrol_path);
+  spdlog::info("Second pass on control db: {}", kcontrol_path);
   pass2(kcontrol_path, &control_bf, &klen, min_w, max_w);
 
-  spdlog::info("Second pass on {}", kcase_path);
+  spdlog::info("Second pass on case db: {}", kcase_path);
   pass2(kcase_path, &case_bf, &klen, min_w, max_w);
 
   char kmer[klen + 1];   // first kmer on sequence (plain)
