@@ -104,13 +104,13 @@ float average(std::map<uint16_t, uint32_t> hist) {
 float median(std::map<uint16_t, uint32_t> hist) {
   // CHECKME
   float med = 0.0;
-  uint64_t total = 0;
+  float total = 0.0;
   for (const auto &x : hist)
-    total += x.first * x.second;
+    total += x.second;
   uint64_t sum = 0;
   for (const auto &x : hist) {
-    sum += x.first * x.second;
-    if (sum > total / 2) {
+    sum += x.second;
+    if (sum >= ceil(total / 2)) {
       med = x.first;
       break;
     }
