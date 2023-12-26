@@ -36,15 +36,21 @@ public:
     _counts = sdsl::int_vector<16>(_brank(_size), 0, 16);
   }
 
-  bool set_count(const uint64_t kmer, const uint16_t counter) {
+  bool set_count(const uint64_t kmer, const uint16_t counter,
+                 bool filter_collisions) {
     if (!_mode)
       return false;
     uint64_t hash = _get_hash(kmer);
     size_t bf_idx = hash % _size;
     if (_bf[bf_idx]) {
       size_t cnts_idx = _brank(bf_idx);
-      uint32_t new_value = _counts[cnts_idx] + counter;
-      _counts[cnts_idx] = new_value;
+      if (filter_collisions && _counts[cnts_idx] != 0) {
+        _counts[cnts_idx] = -1; // UINT MAX
+      } else {
+        uint32_t new_value =
+            _counts[cnts_idx] + counter; // TODO: decide what to do here
+        _counts[cnts_idx] = new_value;
+      }
     }
     return true;
   }
@@ -60,6 +66,17 @@ public:
   }
 
   float get_ratio() const { return _counts.size() / (float)_size; }
+
+  uint64_t clean_counts() {
+    uint n = 0;
+    bool collision = false;
+    for (uint i = 0; i < _counts.size(); ++i) {
+      collision = _counts[i] == (uint16_t)-1; // FIXME: hardcoded uint16_t
+      n += collision;
+      _counts[i] = collision ? 0 : _counts[i];
+    }
+    return n;
+  }
 
 private:
   bool _mode; // false = write, true = read

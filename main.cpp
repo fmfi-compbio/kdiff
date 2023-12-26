@@ -133,18 +133,25 @@ float pass1(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
                tot_kmers);
   CKmerAPI kmer_obj(*klen);
   char kmer[*klen + 1];
+  uint64_t dkmer = 0;
+  uint64_t collisions = 0;
+  uint64 total = 0;
   while (kmer_db.ReadNextKmer(kmer_obj, counter)) {
-    if (counter >= min_w && counter <= max_w) {
-      kmer_obj.to_string(kmer);
-      bf->add_key(kmer2d(kmer, *klen));
-      ++khist[counter];
-    }
+    ++total;
+    kmer_obj.to_string(kmer);
+    dkmer = kmer2d(kmer, *klen);
+    if (bf->test_key(dkmer))
+      ++collisions;
+    bf->add_key(dkmer);
+    ++khist[counter];
   }
+  spdlog::warn("{} collisions out of {} entries", collisions,
+               total); // TODO: move this warn outside this function
   return do_avg ? average(khist) : median(khist);
 }
 
 void pass2(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
-           uint16_t max_w) {
+           uint16_t max_w, bool filter_collisions) {
   CKMCFile kmer_db;
   if (!kmer_db.OpenForListing(kmc_path)) {
     std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
@@ -158,10 +165,8 @@ void pass2(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
   CKmerAPI kmer_obj(*klen);
   char kmer[*klen + 1];
   while (kmer_db.ReadNextKmer(kmer_obj, counter)) {
-    if (counter >= min_w && counter <= max_w) {
-      kmer_obj.to_string(kmer);
-      bf->set_count(kmer2d(kmer, *klen), counter);
-    }
+    kmer_obj.to_string(kmer);
+    bf->set_count(kmer2d(kmer, *klen), counter, filter_collisions);
   }
 }
 
@@ -172,9 +177,11 @@ int main(int argc, char *argv[]) {
   uint16_t min_w = 0;
   uint16_t max_w = -1;
   uint64_t bf_size = ((uint64_t)0b1 << 33); // 1GB
+  bool first_only = false;
   bool do_avg = false;
+  bool filter_collisions = false;
   int a;
-  while ((a = getopt(argc, argv, "w:m:M:b:avh")) >= 0) {
+  while ((a = getopt(argc, argv, "w:m:M:b:a1fvh")) >= 0) {
     switch (a) {
     case 'w':
       wsize = atoi(optarg);
@@ -187,6 +194,12 @@ int main(int argc, char *argv[]) {
       continue;
     case 'a':
       do_avg = true;
+      continue;
+    case 'f':
+      filter_collisions = true;
+      continue;
+    case '1':
+      first_only = true;
       continue;
     case 'b':
       // Let's consider this as GB
@@ -222,6 +235,7 @@ int main(int argc, char *argv[]) {
 
   // TODO: fail if k is different between databases
   uint32_t klen;
+  // TODO: open, reset, close databases here and pass them to functions
 
   spdlog::info("First pass on control db: {}", kcontrol_path);
   float control_norm =
@@ -232,15 +246,26 @@ int main(int argc, char *argv[]) {
   spdlog::info("Switching mode on control BF");
   control_bf.switch_mode();
   spdlog::info("Fill ratio for control BF:\t{}", control_bf.get_ratio());
+
   spdlog::info("Switching mode on case BF");
   case_bf.switch_mode();
   spdlog::info("Fill ratio for case BF:\t{}", case_bf.get_ratio());
 
-  spdlog::info("Second pass on control db: {}", kcontrol_path);
-  pass2(kcontrol_path, &control_bf, &klen, min_w, max_w);
+  if (first_only)
+    return 0;
 
+  spdlog::info("Second pass on control db: {}", kcontrol_path);
+  pass2(kcontrol_path, &control_bf, &klen, min_w, max_w, filter_collisions);
+  if (filter_collisions) {
+    uint64_t n_collisions = control_bf.clean_counts();
+    spdlog::warn("{} kmers filtered out due to collisions", n_collisions);
+  }
   spdlog::info("Second pass on case db: {}", kcase_path);
-  pass2(kcase_path, &case_bf, &klen, min_w, max_w);
+  pass2(kcase_path, &case_bf, &klen, min_w, max_w, filter_collisions);
+  if (filter_collisions) {
+    uint64_t n_collisions = case_bf.clean_counts();
+    spdlog::warn("{} kmers filtered out due to collisions", n_collisions);
+  }
 
   char kmer[klen + 1];   // first kmer on sequence (plain)
   int l;                 // chromosome size
