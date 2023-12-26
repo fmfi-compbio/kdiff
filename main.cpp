@@ -126,6 +126,8 @@ float pass1(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
     std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
     return -1;
   }
+  kmer_db.SetMinCount(min_w);
+  kmer_db.SetMaxCount(max_w);
 
   uint32 mode, min_counter, pref_len, sign_len, min_c, counter;
   uint64 tot_kmers, max_c;
@@ -157,6 +159,8 @@ void pass2(char *kmc_path, BF *bf, uint32_t *klen, uint16_t min_w,
     std::cerr << "ERROR: cannot open " << kmc_path << std::endl;
     exit(1);
   }
+  kmer_db.SetMinCount(min_w);
+  kmer_db.SetMaxCount(max_w);
 
   uint32 mode, min_counter, pref_len, sign_len, min_c, counter;
   uint64 tot_kmers, max_c;
