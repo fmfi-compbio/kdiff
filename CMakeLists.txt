@@ -20,25 +20,6 @@ FetchContent_Declare(spdlog
   GIT_TAG 7e635fca68d014934b4af8a1cf874f63989352b7) # v1.12.0
 FetchContent_MakeAvailable(spdlog)
 
-# sdsl
-message(STATUS "sdsl-lite will be built from source")
-ExternalProject_Add(sdsl
-    GIT_REPOSITORY https://github.com/vgteam/sdsl-lite.git
-    # GIT_TAG 14ae2b430a19a0f8602dc08c1d38906607e73507
-    UPDATE_COMMAND ""
-    BUILD_IN_SOURCE 1
-    PATCH_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND bash install.sh .
-    INSTALL_COMMAND ""
-)
-ExternalProject_Get_Property(sdsl SOURCE_DIR)
-SET(SDSL_SOURCE_DIR ${SOURCE_DIR})
-SET(SDSL_INCLUDE_DIR ${SDSL_SOURCE_DIR}/include)
-add_library(SDSL STATIC IMPORTED)
-set_target_properties(SDSL PROPERTIES IMPORTED_LOCATION ${SDSL_SOURCE_DIR}/lib/libsdsl.a)
-add_dependencies(SDSL sdsl)
-
 # KMC
 message(STATUS "KMC3 will be built from source")
 ExternalProject_Add(kmc
@@ -59,18 +40,16 @@ set_target_properties(KMC PROPERTIES IMPORTED_LOCATION ${KMC_INCLUDE_DIR}/bin/li
 add_dependencies(KMC kmc)
 
 
-add_dependencies(MFCNV spdlog SDSL KMC)
+add_dependencies(MFCNV spdlog KMC)
 
 target_include_directories(MFCNV
   PRIVATE ${KMC_INCLUDE_DIR}
-  PRIVATE ${SDSL_INCLUDE_DIR}
   PRIVATE ${PROJECT_SOURCE_DIR}
 )
 
 target_link_libraries(MFCNV
-  PUBLIC spdlog::spdlog
-  PUBLIC SDSL
   PUBLIC KMC
   PUBLIC z
+  PUBLIC spdlog::spdlog
   # PUBLIC OpenMP::OpenMP_CXX
 )
