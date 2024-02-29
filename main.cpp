@@ -1,7 +1,5 @@
 #include <iostream>
 #include <map>
-#include <numeric>
-#include <string>
 #include <zlib.h>
 
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -16,13 +14,16 @@ using namespace std;
 
 static const char *const USAGE_MESSAGE =
     "Usage: MFCNV <reference.fa> <control_kmc_db> <case_kmc_db> \n"
-    "      -m <INT>   minimum weight for kmers (default: 0)\n"
-    "      -M <INT>   maximum weight for kmers (default: 65535)\n"
-    "      -w <INT>   bin size (default: 1000)\n"
-    "      -a         use average instead of median for normalization\n"
+    "      -m <INT>     minimum weight for kmers (default: 0)\n"
+    "      -M <INT>     maximum weight for kmers (default: 65535)\n"
+    "      -w <INT>     bin size (default: 1000)\n"
+    "      -z <FLOAT>   filter windows with less than this percentage of\n"
+    "                   non-zeros counts (value in [0,1], default: 0.0,\n"
+    "                   i.e., no filtering)\n"
+    "      -a           use average instead of median for normalization\n"
     // "      -@ <INT>   set threads (default: 1)\n"
-    "      -v         verbose mode\n"
-    "      -h         display this help and exit\n"
+    "      -v           verbose mode\n"
+    "      -h           display this help and exit\n"
     "\n";
 
 float average(map<uint16_t, uint32_t> hist) {
@@ -61,8 +62,8 @@ float get_norm_factor(char *kmc_path, uint16_t min_w, uint16_t max_w,
   kmer_db.SetMinCount(min_w);
   kmer_db.SetMaxCount(max_w);
 
-  uint32 klen, mode, min_counter, pref_len, sign_len, min_c, counter;
-  uint64 tot_kmers, max_c;
+  uint32_t klen, mode, min_counter, pref_len, sign_len, min_c, counter;
+  uint64_t tot_kmers, max_c;
   kmer_db.Info(klen, mode, min_counter, pref_len, sign_len, min_c, max_c,
                tot_kmers);
   CKmerAPI kmer_obj(klen);
@@ -77,10 +78,11 @@ int main(int argc, char *argv[]) {
   uint16_t wsize = 1000; // window size
   uint16_t min_w = 0;
   uint16_t max_w = -1;
+  float nzt = 0.0;
   bool do_avg = false;
   bool verbose = false;
   int a;
-  while ((a = getopt(argc, argv, "w:b:m:M:@:avh")) >= 0) {
+  while ((a = getopt(argc, argv, "w:b:m:M:z:avh")) >= 0) {
     switch (a) {
     case 'w':
       wsize = atoi(optarg);
@@ -92,7 +94,11 @@ int main(int argc, char *argv[]) {
       max_w = atoi(optarg);
       continue;
     case 'a':
+      spdlog::critical("Average will not work as expected!");
       do_avg = true;
+      continue;
+    case 'z':
+      nzt = atof(optarg);
       continue;
     case 'v':
       verbose = true;
@@ -155,6 +161,8 @@ int main(int argc, char *argv[]) {
   int l; // chromosome size
   int p; // position on chromosome
   char *binseq = (char *)malloc(wsize);
+  int ctrl_zeros;
+  float wscore;
   while ((l = kseq_read(seq)) >= 0) {
     spdlog::info("Processing {}", seq->name.s);
     p = 0;
@@ -162,6 +170,38 @@ int main(int argc, char *argv[]) {
       strncpy(binseq, seq->seq.s + p, wsize);
       binseq[wsize] = '\0';
       ctrl_db.GetCountersForRead(binseq, ctrl_counts);
+      // Check for 0s in the control
+      ctrl_zeros = 0;
+      for (const auto &w : ctrl_counts)
+        ctrl_zeros += w == 0;
+      wscore = -1.0;
+      if (ctrl_zeros <= (1.0 - nzt) * wsize) {
+        case_db.GetCountersForRead(binseq, case_counts);
+        for (size_t i = 0; i < ratios.size(); ++i) {
+          ratios[i] =
+              (float)(case_counts[i] == 0 ? 0.0001
+                                          : case_counts[i] / case_norm) /
+              (float)(ctrl_counts[i] == 0 ? 0.0001
+                                          : ctrl_counts[i] / ctrl_norm);
+        }
+        // CHECKME: what about even wsize?
+        nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
+        wscore = ratios[wsize / 2];
+      }
+      cout << seq->name.s << ":" << p << "-" << p + wsize << "\t" << wscore
+           << endl;
+      p += wsize;
+    }
+    // last window with length < wsize
+    strncpy(binseq, seq->seq.s + p, l - p);
+    binseq[l - p] = '\0';
+    ctrl_db.GetCountersForRead(binseq, ctrl_counts);
+    // Check for 0s in the control
+    ctrl_zeros = 0;
+    for (const auto &w : ctrl_counts)
+      ctrl_zeros += w == 0;
+    wscore = -1.0;
+    if (ctrl_zeros <= (1.0 - nzt) * (l - p)) {
       case_db.GetCountersForRead(binseq, case_counts);
       for (size_t i = 0; i < ratios.size(); ++i) {
         ratios[i] =
@@ -170,24 +210,9 @@ int main(int argc, char *argv[]) {
       }
       // CHECKME: what about even wsize?
       nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
-      cout << seq->name.s << ":" << p << "-" << p + wsize << "\t"
-           << ratios[wsize / 2] << endl;
-      p += wsize;
+      wscore = ratios[wsize / 2];
     }
-    // last part
-    strncpy(binseq, seq->seq.s + p, l - p);
-    binseq[l - p] = '\0';
-    ctrl_db.GetCountersForRead(binseq, ctrl_counts);
-    case_db.GetCountersForRead(binseq, case_counts);
-    for (size_t i = 0; i < ratios.size(); ++i) {
-      ratios[i] =
-          (float)(case_counts[i] == 0 ? 0.0001 : case_counts[i] / case_norm) /
-          (float)(ctrl_counts[i] == 0 ? 0.0001 : ctrl_counts[i] / ctrl_norm);
-    }
-    // CHECKME: what about even wsize?
-    nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
-    cout << seq->name.s << ":" << p << "-" << l << "\t" << ratios[wsize / 2]
-         << endl;
+    cout << seq->name.s << ":" << p << "-" << l << "\t" << wscore << endl;
   }
   kseq_destroy(seq);
   gzclose(fa);
