@@ -155,7 +155,8 @@ int main(int argc, char *argv[]) {
                      ctrl_db.KmerLength(), case_db.KmerLength());
     return 1;
   }
-  vector<float> ratios(wsize);
+
+  vector<float> ratios(wsize - ctrl_db.KmerLength() + 1);
   gzFile fa = gzopen(fa_path, "r");
   kseq_t *seq = kseq_init(fa);
   int l; // chromosome size
@@ -180,9 +181,9 @@ int main(int argc, char *argv[]) {
         for (size_t i = 0; i < ratios.size(); ++i) {
           ratios[i] =
               (float)(case_counts[i] == 0 ? 0.0001
-                                          : case_counts[i] / case_norm) /
+                                          : (float)case_counts[i] / case_norm) /
               (float)(ctrl_counts[i] == 0 ? 0.0001
-                                          : ctrl_counts[i] / ctrl_norm);
+                                          : (float)ctrl_counts[i] / ctrl_norm);
         }
         // CHECKME: what about even wsize?
         nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
@@ -192,8 +193,10 @@ int main(int argc, char *argv[]) {
            << endl;
       p += wsize;
     }
+
     // last window with length < wsize
     strncpy(binseq, seq->seq.s + p, l - p);
+    ratios.resize(l - p);
     binseq[l - p] = '\0';
     ctrl_db.GetCountersForRead(binseq, ctrl_counts);
     // Check for 0s in the control
@@ -205,8 +208,8 @@ int main(int argc, char *argv[]) {
       case_db.GetCountersForRead(binseq, case_counts);
       for (size_t i = 0; i < ratios.size(); ++i) {
         ratios[i] =
-            (float)(case_counts[i] == 0 ? 0.0001 : case_counts[i] / case_norm) /
-            (float)(ctrl_counts[i] == 0 ? 0.0001 : ctrl_counts[i] / ctrl_norm);
+            (float)(case_counts[i] == 0 ? 0.0001 : (float)case_counts[i] / case_norm) /
+            (float)(ctrl_counts[i] == 0 ? 0.0001 : (float)ctrl_counts[i] / ctrl_norm);
       }
       // CHECKME: what about even wsize?
       nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
@@ -216,7 +219,7 @@ int main(int argc, char *argv[]) {
   }
   kseq_destroy(seq);
   gzclose(fa);
-
+  free(binseq);
   return 0;
 }
 
