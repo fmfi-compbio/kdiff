@@ -29,3 +29,19 @@ kmc_tools simple reference-k21 case-k21 intersect case-filter-k21 -ocright
 # 3 run kdiff
 ../MFCNV reference.fa control-filter-k21 case-filter-k21 -w 100 > bins.depth
 ```
+
+### Analysis
+``` sh
+mamba create -c conda-forge -c bioconda -n mfcnv minimap2 kmc seaborn biopython pysam ucsc-bigwigtobedgraph
+conda activate mfcnv
+
+# align sample to reference
+minimap2 -t4 [reference.fa] [sample.fq] -x map-ont -a | samtools view -bS | samtools sort > [sample.bam]
+
+# plot on region (e.g., NC_083674.1:510-549)
+bash scripts/analysis.sh [reference] [region] \
+                         [reference-kmc-prefix] [cnt-kmc-prefix] [case1-kmc-prefix] [case2-kmc-prefix] \
+                         [case1.bedgraph.bw] [case2.bedgraph.bw] \
+                         [cntr.bam] [case1.bam] [case2.bam] \
+                         [output_directory] [k]
+```
