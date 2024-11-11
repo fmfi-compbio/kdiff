@@ -139,6 +139,10 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // CHECKME
+  float eps1 = 0.0001 * ctrl_norm / (ctrl_norm + case_norm);
+  float eps2 = 0.0001 * case_norm / (ctrl_norm + case_norm);
+
   CKMCFile ctrl_db;
   vector<uint32_t> ctrl_counts;
   ctrl_db.OpenForRA(kctrl_path);
@@ -180,9 +184,9 @@ int main(int argc, char *argv[]) {
         case_db.GetCountersForRead(binseq, case_counts);
         for (size_t i = 0; i < ratios.size(); ++i) {
           ratios[i] =
-              (float)(case_counts[i] == 0 ? 0.0001
+              (float)(case_counts[i] == 0 ? eps2
                                           : (float)case_counts[i] / case_norm) /
-              (float)(ctrl_counts[i] == 0 ? 0.0001
+              (float)(ctrl_counts[i] == 0 ? eps1
                                           : (float)ctrl_counts[i] / ctrl_norm);
         }
         // CHECKME: what about even wsize?
@@ -208,8 +212,10 @@ int main(int argc, char *argv[]) {
       case_db.GetCountersForRead(binseq, case_counts);
       for (size_t i = 0; i < ratios.size(); ++i) {
         ratios[i] =
-            (float)(case_counts[i] == 0 ? 0.0001 : (float)case_counts[i] / case_norm) /
-            (float)(ctrl_counts[i] == 0 ? 0.0001 : (float)ctrl_counts[i] / ctrl_norm);
+            (float)(case_counts[i] == 0 ? eps2
+                                        : (float)case_counts[i] / case_norm) /
+            (float)(ctrl_counts[i] == 0 ? eps1
+                                        : (float)ctrl_counts[i] / ctrl_norm);
       }
       // CHECKME: what about even wsize?
       nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
