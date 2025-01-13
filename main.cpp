@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -90,20 +91,18 @@ float get_score(char *binseq, int wsize, CKMCFile &ctrl_db,
   float wscore = -1.0;
   if (ctrl_zeros <= (1.0 - nzt) * wsize) {
     case_db.GetCountersForRead(binseq, case_counts);
-    for (size_t i = 0; i < ratios.size(); ++i) {
+    for (int i = 0; i < wsize; ++i) {
       ratios[i] =
           (float)(case_counts[i] == 0 ? eps2
                                       : (float)case_counts[i] / case_norm) /
           (float)(ctrl_counts[i] == 0 ? eps1
                                       : (float)ctrl_counts[i] / ctrl_norm);
     }
-    // XXX: if wsize is even, we should sort and then do average
-    nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
 
+    nth_element(ratios.begin(), ratios.begin() + wsize / 2, ratios.end());
     if (wsize % 2 == 0) {
-      // int x = max_element(ratios.begin(), ratios.begin() + (wsize / 2));
-      // wscore = (ratios[wsize / 2] + x) / 2;
-      wscore = ratios[wsize / 2];
+      const auto x = max_element(ratios.begin(), ratios.begin() + (wsize / 2));
+      wscore = (ratios[wsize / 2] + *x) / 2;
     } else {
       wscore = ratios[wsize / 2];
     }

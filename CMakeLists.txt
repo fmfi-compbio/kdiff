@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 project(MFCNV VERSION 1.0.0)
 add_executable(MFCNV main.cpp) 
 set_target_properties(MFCNV PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
-target_compile_options(MFCNV PRIVATE -Wall -Wextra)
+target_compile_options(MFCNV PRIVATE -Wall -Wextra -Wno-unused-variable -Wno-sign-compare)
 
 # find_package(OpenMP REQUIRED)
 
