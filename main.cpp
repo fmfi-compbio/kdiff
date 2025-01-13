@@ -13,7 +13,8 @@ KSEQ_INIT(gzFile, gzread)
 using namespace std;
 
 static const char *const USAGE_MESSAGE =
-    "Usage: MFCNV <reference.fa> <control_kmc_db> <case_kmc_db> \n"
+    "Usage: MFCNV <reference.fa> <reference_kmc_db> <control_kmc_db> "
+    "<case_kmc_db> \n"
     "      -m <INT>     minimum weight for kmers (default: 0)\n"
     "      -M <INT>     maximum weight for kmers (default: 65535)\n"
     "      -w <INT>     bin size (default: 1000)\n"
@@ -26,13 +27,11 @@ static const char *const USAGE_MESSAGE =
     "      -h           display this help and exit\n"
     "\n";
 
-float average(map<uint16_t, uint32_t> hist) {
-  // TODO
-  // (void)(hist); // suppress unused parameter warning
+float average(map<uint16_t, uint32_t> hist, uint64_t &tot_refkmers) {
   float total = 0.0;
   for (const auto &x : hist)
     total += x.first * x.second;
-  return total / 248956422.0; // FIXME
+  return total / tot_refkmers;
 }
 
 float median(map<uint16_t, uint32_t> hist) {
@@ -53,7 +52,7 @@ float median(map<uint16_t, uint32_t> hist) {
 }
 
 float get_norm_factor(char *kmc_path, uint16_t min_w, uint16_t max_w,
-                      bool do_avg) {
+                      bool do_avg, uint64_t &tot_refkmers) {
   map<uint16_t, uint32_t> khist;
   CKMCFile kmer_db;
   if (!kmer_db.OpenForListing(kmc_path))
@@ -69,7 +68,7 @@ float get_norm_factor(char *kmc_path, uint16_t min_w, uint16_t max_w,
   CKmerAPI kmer_obj(klen);
   while (kmer_db.ReadNextKmer(kmer_obj, counter))
     ++khist[counter];
-  return do_avg ? average(khist) : median(khist);
+  return do_avg ? average(khist, tot_refkmers) : median(khist);
 }
 
 int main(int argc, char *argv[]) {
@@ -94,7 +93,6 @@ int main(int argc, char *argv[]) {
       max_w = atoi(optarg);
       continue;
     case 'a':
-      spdlog::critical("Average will not work as expected!");
       do_avg = true;
       continue;
     case 'z':
@@ -112,32 +110,47 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (argc - optind < 3) {
+  if (argc - optind < 4) {
     cerr << USAGE_MESSAGE;
     return 1;
   }
 
   char *fa_path = argv[optind++];    // reference
+  char *kref_path = argv[optind++];  // reference KMC database
   char *kctrl_path = argv[optind++]; // control KMC database
   char *kcase_path = argv[optind];   // case KMC database
 
   if (verbose) {
     spdlog::set_level(spdlog::level::debug);
-    spdlog::debug("Setting threads to 1 for verbose mode");
+    // spdlog::debug("Setting threads to 1 for verbose mode");
   }
 
+  spdlog::info("Opening reference db");
+  CKMCFile kmer_db;
+  if (!kmer_db.OpenForRA(kref_path))
+    return -1;
+  uint64_t tot_refkmers = kmer_db.KmerCount();
+  kmer_db.Close();
+
   spdlog::info("Computing normalization factor on control db");
-  float ctrl_norm = get_norm_factor(kctrl_path, min_w, max_w, do_avg);
+  float ctrl_norm =
+      get_norm_factor(kctrl_path, min_w, max_w, do_avg, tot_refkmers);
   if (ctrl_norm < 0) {
     spdlog::critical("Something went wrong while reading {}", kctrl_path);
     return 1;
   }
+  if (verbose)
+    spdlog::debug("Normalization factor on control db: {}", ctrl_norm);
+
   spdlog::info("Computing normalization factor on case db");
-  float case_norm = get_norm_factor(kcase_path, min_w, max_w, do_avg);
+  float case_norm =
+      get_norm_factor(kcase_path, min_w, max_w, do_avg, tot_refkmers);
   if (case_norm < 0) {
     spdlog::critical("Something went wrong while reading {}", kcase_path);
     return 1;
   }
+  if (verbose)
+    spdlog::debug("Normalization factor on case db: {}", case_norm);
 
   // CHECKME
   float eps1 = 0.0001 * ctrl_norm / (ctrl_norm + case_norm);
@@ -226,48 +239,5 @@ int main(int argc, char *argv[]) {
   kseq_destroy(seq);
   gzclose(fa);
   free(binseq);
-  return 0;
-}
-
-int main_test(int argc, char *argv[]) {
-  (void)(argc); // suppress unused parameter warning
-  spdlog::set_default_logger(spdlog::stderr_color_st("stderr"));
-
-  char *kmc_path = argv[1];
-
-  CKMCFile kmer_db_ra;
-  kmer_db_ra.OpenForRA(kmc_path);
-
-  CKMCFile kmer_db;
-  kmer_db.OpenForListing(kmc_path);
-  uint32 klen, mode, min_counter, pref_len, sign_len, min_c, counter;
-  uint64 tot_kmers, max_c;
-  kmer_db.Info(klen, mode, min_counter, pref_len, sign_len, min_c, max_c,
-               tot_kmers);
-  CKmerAPI kmer_obj(klen);
-  char kmer[klen + 1];
-  bool found;
-  uint32_t counter_ra;
-  while (kmer_db.ReadNextKmer(kmer_obj, counter)) {
-    kmer_obj.to_string(kmer);
-    found = kmer_db_ra.CheckKmer(kmer_obj, counter_ra);
-    assert(counter == counter_ra);
-    spdlog::info("{}: {} - {} {}", string(kmer), found, counter, counter_ra);
-  }
-
-  kmer_obj.from_string("AAC");
-  found = kmer_db_ra.CheckKmer(kmer_obj, counter_ra);
-  spdlog::info("AAC: {}", counter_ra);
-
-  kmer_obj.from_string("GTT");
-  found = kmer_db_ra.CheckKmer(kmer_obj, counter_ra);
-  spdlog::info("GTT: {}", counter_ra);
-
-  vector<uint32_t> counts;
-  kmer_db_ra.GetCountersForRead("AACNGTT", counts);
-  for (const auto &c : counts)
-    cout << c << " ";
-  cout << endl;
-
   return 0;
 }
