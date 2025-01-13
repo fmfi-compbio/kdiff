@@ -91,7 +91,8 @@ float get_score(char *binseq, int wsize, CKMCFile &ctrl_db,
   float wscore = -1.0;
   if (ctrl_zeros <= (1.0 - nzt) * wsize) {
     case_db.GetCountersForRead(binseq, case_counts);
-    for (int i = 0; i < wsize; ++i) {
+    for (size_t i = 0;
+         i < case_counts.size() /* wsize - ctrl_db.KmerLength() + 1*/; ++i) {
       ratios[i] =
           (float)(case_counts[i] == 0 ? eps2
                                       : (float)case_counts[i] / case_norm) /
@@ -240,7 +241,7 @@ int main(int argc, char *argv[]) {
   kseq_t *seq = kseq_init(fa);
   int l; // chromosome size
   int p; // position on chromosome
-  char *binseq = (char *)malloc(wsize);
+  char *binseq = (char *)malloc((wsize + 1) * sizeof(char));
   int binseq_c = wsize;
   float wscore;
   while ((l = kseq_read(seq)) >= 0) {
