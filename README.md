@@ -6,6 +6,7 @@ mkdir build ; cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 cd ..
+./MFCNV -h
 ```
 
 ### How-to
@@ -26,9 +27,11 @@ kmc -m16 -t4 -k21 -ci2 -cs65535 @case.list case-k21 .
 kmc_tools simple reference-k21 control-k21 intersect control-filter-k21 -ocright
 kmc_tools simple reference-k21 case-k21 intersect case-filter-k21 -ocright
 
-# 3 run kdiff
+# 3 run MFCNV
 ../MFCNV reference.fa reference-k21 control-filter-k21 case-filter-k21 -w 100 > bins.depth
 ```
+
+MFCNV also accepts a list of regions (`-r` option) to be analyzed (in BED format, 0-based and half-open).
 
 ### Analysis
 ``` sh
