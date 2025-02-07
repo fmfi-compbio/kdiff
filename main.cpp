@@ -16,20 +16,22 @@ KSEQ_INIT(gzFile, gzread)
 using namespace std;
 
 static const char *const USAGE_MESSAGE =
-    "Usage: MFCNV <reference.fa> <reference_kmc_db> <control_kmc_db> "
+    "Usage: kdiff [options] <reference.fa> <reference_kmc_db> <control_kmc_db> "
     "<case_kmc_db> \n"
-    "      -m <INT>     minimum weight for kmers (default: 0)\n"
-    "      -M <INT>     maximum weight for kmers (default: 65535)\n"
-    "      -w <INT>     bin size (default: 1000)\n"
-    "      -z <FLOAT>   filter windows with less than this percentage of\n"
-    "                   non-zeros counts (value in [0,1], default: 0.0,\n"
-    "                   i.e., no filtering)\n"
-    "      -r <BED>     regions file in BED format (default: None, i.e., full "
+    "Options:\n"
+    "        -m <INT>     minimum weight for kmers (default: 0)\n"
+    "        -M <INT>     maximum weight for kmers (default: 65535)\n"
+    "        -w <INT>     bin size (default: 1000)\n"
+    "        -z <FLOAT>   filter windows with less than this percentage of\n"
+    "                     non-zeros counts (value in [0,1], default: 0.0,\n"
+    "                     i.e., no filtering)\n"
+    "        -r <BED>     regions file in BED format (default: None, i.e., "
+    "full "
     "genome)\n"
-    "      -a           use average instead of median for normalization\n"
+    "        -a           use average instead of median for normalization\n"
     // "      -@ <INT>   set threads (default: 1)\n"
-    "      -v           verbose mode\n"
-    "      -h           display this help and exit\n"
+    "        -v           verbose mode\n"
+    "        -h           display this help and exit\n"
     "\n";
 
 float average(map<uint16_t, uint32_t> hist, uint64_t &tot_refkmers) {

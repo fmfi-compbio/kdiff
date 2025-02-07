@@ -8,10 +8,10 @@ include(FetchContent)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-project(MFCNV VERSION 1.0.0)
-add_executable(MFCNV main.cpp) 
-set_target_properties(MFCNV PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
-target_compile_options(MFCNV PRIVATE -Wall -Wextra -Wno-unused-variable -Wno-sign-compare)
+project(kdiff VERSION 1.0.0)
+add_executable(kdiff main.cpp)
+set_target_properties(kdiff PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
+target_compile_options(kdiff PRIVATE -Wall -Wextra -Wno-unused-variable -Wno-sign-compare)
 
 # find_package(OpenMP REQUIRED)
 
@@ -42,14 +42,14 @@ set_target_properties(KMC PROPERTIES IMPORTED_LOCATION ${KMC_INCLUDE_DIR}/bin/li
 add_dependencies(KMC kmc)
 
 
-add_dependencies(MFCNV spdlog KMC)
+add_dependencies(kdiff spdlog KMC)
 
-target_include_directories(MFCNV
+target_include_directories(kdiff
   PRIVATE ${KMC_INCLUDE_DIR}
   PRIVATE ${PROJECT_SOURCE_DIR}
 )
 
-target_link_libraries(MFCNV
+target_link_libraries(kdiff
   PUBLIC KMC
   PUBLIC z
   PUBLIC spdlog::spdlog

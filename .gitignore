@@ -3,6 +3,7 @@ build/
 .vscode/
 *~
 MFCNV
+kdiff
 *.o
 *.depth
 *.kmc_pre

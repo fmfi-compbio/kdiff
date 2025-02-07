@@ -1,12 +1,12 @@
 # README
 ```sh
-git clone https://github.com/ldenti/mfcnv.git
-cd mfcnv
+git clone https://github.com/fmfi-compbio/kdiff.git
+cd kdiff
 mkdir build ; cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 cd ..
-./MFCNV -h
+./kdiff -h
 ```
 
 ### How-to
@@ -28,23 +28,7 @@ kmc_tools simple reference-k21 control-k21 intersect control-filter-k21 -ocright
 kmc_tools simple reference-k21 case-k21 intersect case-filter-k21 -ocright
 
 # 3 run MFCNV
-../MFCNV reference.fa reference-k21 control-filter-k21 case-filter-k21 -w 100 > bins.depth
+../kdiff reference.fa reference-k21 control-filter-k21 case-filter-k21 -w 100 > bins.depth
 ```
 
-MFCNV also accepts a list of regions (`-r` option) to be analyzed (in BED format, 0-based and half-open).
-
-### Analysis
-``` sh
-mamba create -c conda-forge -c bioconda -n mfcnv minimap2 kmc seaborn biopython pysam ucsc-bigwigtobedgraph
-conda activate mfcnv
-
-# align sample to reference
-minimap2 -t4 [reference.fa] [sample.fq] -x map-ont -a | samtools view -bS | samtools sort > [sample.bam]
-
-# plot on region (e.g., NC_083674.1:510-549)
-bash scripts/analysis.sh [reference] [region] \
-                         [reference-kmc-prefix] [cnt-kmc-prefix] [case1-kmc-prefix] [case2-kmc-prefix] \
-                         [case1.bedgraph.bw] [case2.bedgraph.bw] \
-                         [cntr.bam] [case1.bam] [case2.bam] \
-                         [output_directory] [k]
-```
+kdiff also accepts a list of regions (`-r` option) to be analyzed (in BED format, 0-based and half-open).
