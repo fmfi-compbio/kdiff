@@ -27,7 +27,7 @@ kmc -m16 -t4 -k21 -ci2 -cs65535 @case.list case-k21 .
 kmc_tools simple reference-k21 control-k21 intersect control-filter-k21 -ocright
 kmc_tools simple reference-k21 case-k21 intersect case-filter-k21 -ocright
 
-# 3 run MFCNV
+# 3 run kdiff
 ../kdiff reference.fa reference-k21 control-filter-k21 case-filter-k21 -w 100 > bins.depth
 ```
 
